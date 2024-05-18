@@ -1,3 +1,3 @@
 # ss-setup
 
-路由器部署 Shadowsocks 规则的配置文件和脚本。
+在路由器或 Linux 主机上部署 Shadowsocks 规则。
