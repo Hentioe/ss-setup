@@ -35,8 +35,13 @@ done
 # Ignore LANs and any other addresses you'd like to bypass the proxy
 # IPv4
 iptables -t nat -A SHADOWSOCKS -d 0.0.0.0/8 -j RETURN
+iptables -t nat -A SHADOWSOCKS -d 10.0.0.0/8 -j RETURN
 iptables -t nat -A SHADOWSOCKS -d 127.0.0.0/8 -j RETURN
+iptables -t nat -A SHADOWSOCKS -d 169.254.0.0/16 -j RETURN
+iptables -t nat -A SHADOWSOCKS -d 172.16.0.0/12 -j RETURN
 iptables -t nat -A SHADOWSOCKS -d 192.168.0.0/16 -j RETURN
+iptables -t nat -A SHADOWSOCKS -d 224.0.0.0/4 -j RETURN
+iptables -t nat -A SHADOWSOCKS -d 240.0.0.0/4 -j RETURN
 # IPv6
 ip6tables -t nat -A SHADOWSOCKS -d ::1/128 -j RETURN
 ip6tables -t nat -A SHADOWSOCKS -d fc00::/7 -j RETURN
@@ -57,6 +62,6 @@ ip6tables -t nat -A SHADOWSOCKS -p tcp -j REDIRECT --to-ports 1080 # IPv6
 iptables -t nat -A PREROUTING -p tcp -j SHADOWSOCKS  # IPv4
 ip6tables -t nat -A PREROUTING -p tcp -j SHADOWSOCKS # IPv6
 
-# Apply the rules for local output
+# Apply the rules for local traffic
 iptables -t nat -A OUTPUT -p tcp -j SHADOWSOCKS  # IPv4
 ip6tables -t nat -A OUTPUT -p tcp -j SHADOWSOCKS # IPv6
