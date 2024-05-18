@@ -1,11 +1,7 @@
 #!/bin/sh
 
-# Define the URL and local file path
-url="http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest"
-local_file="delegated-apnic-latest.txt"
-
 # Download the file
-curl -s "$url" -o "$local_file"
+curl http://ftp.apnic.net/apnic/stats/apnic/delegated-apnic-latest -o "delegated-apnic-latest.txt"
 
 # Generate china-ipv4.txt from the local file
 awk -F '|' '/CN/&&/ipv4/ {print $4 "/" 32-log($5)/log(2)}' "$local_file" >china-ipv4.txt
