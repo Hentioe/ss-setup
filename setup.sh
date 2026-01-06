@@ -1,67 +1,53 @@
 #!/bin/sh
 
-# Create new chain for IPv4
-iptables -t nat -N SHADOWSOCKS
-# Create new chain for IPv6
-ip6tables -t nat -N SHADOWSOCKS
-# Create new ipset for China's IPv4 addresses
-ipset create chnroute hash:net maxelem 65536
-# Create new ipset for China's IPv6 addresses
-ipset create chnroute6 hash:net family inet6
+# 1. Create table and chains
+nft add table inet ss_nat
+nft flush table inet ss_nat
 
-# Add China routing table for IPv4
-for ip in $(cat 'china-ipv4.txt'); do
-    ipset add chnroute $ip
-done
+nft add chain inet ss_nat SHADOWSOCKS
+nft add chain inet ss_nat prerouting { type nat hook prerouting priority dstnat \; policy accept \; }
+nft add chain inet ss_nat output { type nat hook output priority filter \; policy accept \; }
 
-# Add China routing table for IPv6
-for ip in $(cat 'china-ipv6.txt'); do
-    ipset add chnroute6 $ip
-done
+# 2. Create sets
+nft add set inet ss_nat chnroute { type ipv4_addr \; flags interval \; }
+nft add set inet ss_nat chnroute6 { type ipv6_addr \; flags interval \; }
 
-# Add whitelist for IPv4
-for ip in $(cat 'whitelist.txt'); do
-    ipset add chnroute $ip
-done
+# Helper function to batch load IP lists into nftables sets
+import_to_set() {
+    set_name=$1
+    file_list=$2
 
-# Add whitelist for IPv6
-for ip in $(cat 'whitelist6.txt'); do
-    ipset add chnroute6 $ip
-done
+    # Print log message for progress
+    echo "Loading $set_name from $file_list..."
 
-# Ignore your shadowsocks server's addresses
-# It's very IMPORTANT, just be careful.
+    # Construct and pipe the batch command to nft
+    {
+        printf "add element inet ss_nat %s {\n" "$set_name"
+        cat $file_list | sed 's/$/,/'
+        printf "}\n"
+    } | nft -f -
 
-# Ignore LANs and any other addresses you'd like to bypass the proxy
-# IPv4
-iptables -t nat -A SHADOWSOCKS -d 0.0.0.0/8 -j RETURN
-iptables -t nat -A SHADOWSOCKS -d 10.0.0.0/8 -j RETURN
-iptables -t nat -A SHADOWSOCKS -d 127.0.0.0/8 -j RETURN
-iptables -t nat -A SHADOWSOCKS -d 169.254.0.0/16 -j RETURN
-iptables -t nat -A SHADOWSOCKS -d 172.16.0.0/12 -j RETURN
-iptables -t nat -A SHADOWSOCKS -d 192.168.0.0/16 -j RETURN
-iptables -t nat -A SHADOWSOCKS -d 224.0.0.0/4 -j RETURN
-iptables -t nat -A SHADOWSOCKS -d 240.0.0.0/4 -j RETURN
-# IPv6
-ip6tables -t nat -A SHADOWSOCKS -d ::1/128 -j RETURN
-ip6tables -t nat -A SHADOWSOCKS -d fc00::/7 -j RETURN
-ip6tables -t nat -A SHADOWSOCKS -d fe80::/10 -j RETURN
-ip6tables -t nat -A SHADOWSOCKS -d fd00::/8 -j RETURN
+    # Print completion log
+    echo "Finished loading $set_name."
+}
 
-# Directly connected to China IPv4 addresses
-iptables -t nat -A SHADOWSOCKS -p tcp -m set --match-set chnroute dst -j RETURN
+# 3. Add China routing table and whitelist for IPv4
+import_to_set "chnroute" "dist/china-ipv4.txt dist/whitelist.txt"
 
-# Directly connected to China IPv6 addresses
-ip6tables -t nat -A SHADOWSOCKS -p tcp -m set --match-set chnroute6 dst -j RETURN
+# 4. Add China routing table and whitelist for IPv6
+import_to_set "chnroute6" "dist/china-ipv6.txt dist/whitelist6.txt"
 
-# Redirect everything else to shadowsocks's local port
-iptables -t nat -A SHADOWSOCKS -p tcp -j REDIRECT --to-ports 1080  # IPv4
-ip6tables -t nat -A SHADOWSOCKS -p tcp -j REDIRECT --to-ports 1080 # IPv6
+# 5. Bypass LANs and reserved addresses (Optimized to single lines)
+nft add rule inet ss_nat SHADOWSOCKS ip daddr { 0.0.0.0/8, 10.0.0.0/8, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4 } return
+nft add rule inet ss_nat SHADOWSOCKS ip6 daddr { ::1/128, fc00::/7, fe80::/10, fd00::/8 } return
 
-# Apply the rules for incoming traffic
-iptables -t nat -A PREROUTING -p tcp -j SHADOWSOCKS  # IPv4
-ip6tables -t nat -A PREROUTING -p tcp -j SHADOWSOCKS # IPv6
+# 6. Bypass China IP sets
+nft add rule inet ss_nat SHADOWSOCKS ip daddr @chnroute return
+nft add rule inet ss_nat SHADOWSOCKS ip6 daddr @chnroute6 return
 
-# Apply the rules for local traffic
-iptables -t nat -A OUTPUT -p tcp -j SHADOWSOCKS  # IPv4
-ip6tables -t nat -A OUTPUT -p tcp -j SHADOWSOCKS # IPv6
+# 7. Redirect everything else to local port 1080
+nft add rule inet ss_nat SHADOWSOCKS meta l4proto tcp redirect to :1080
+
+# 8. Apply rules to hooks
+nft add rule inet ss_nat prerouting meta l4proto tcp jump SHADOWSOCKS
+nft add rule inet ss_nat output meta l4proto tcp jump SHADOWSOCKS
