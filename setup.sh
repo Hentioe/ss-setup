@@ -32,10 +32,10 @@ import_to_set() {
 }
 
 # 3. Add China routing table and whitelist for IPv4
-import_to_set "chnroute" "dist/china-ipv4.txt dist/whitelist.txt"
+import_to_set "chnroute" "dist/china-ipv4.txt whitelist/4.txt"
 
 # 4. Add China routing table and whitelist for IPv6
-import_to_set "chnroute6" "dist/china-ipv6.txt dist/whitelist6.txt"
+import_to_set "chnroute6" "dist/china-ipv6.txt whitelist/6.txt"
 
 # 5. Bypass LANs and reserved addresses (Optimized to single lines)
 nft add rule inet ss_nat SHADOWSOCKS ip daddr { 0.0.0.0/8, 10.0.0.0/8, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4 } return
